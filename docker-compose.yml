@@ -1,0 +1,158 @@
+# payload-playground local stack.
+#   Dev flow:  docker compose up -d   →   pnpm dev
+#   Full app:  docker compose --profile app up -d --build
+#
+# Values come from .env (copy .env.example). Defaults below match .env.example.
+name: payload-playground
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: payload-playground-postgres
+    restart: unless-stopped
+    # The page builder creates ~400 tables (blocks × versions); migrations and resets lock them all.
+    command: ['postgres', '-c', 'max_locks_per_transaction=1024']
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-payload}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-payload}
+      POSTGRES_DB: ${POSTGRES_DB:-payload_playground}
+    ports:
+      - '5434:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # MinIO community build (the official minio/minio images are no longer published on Docker Hub).
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: payload-playground-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-payload-playground-root}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-payload-playground-root-secret}
+      # Browser uploads (clientUploads) and signed downloads come from the Next.js origin.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - '9200:9000' # S3 API
+      - '9201:9001' # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: private bucket + app user limited to that bucket. Safe to re-run.
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-10-18T00-00-00Z
+    container_name: payload-playground-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-payload-playground-root}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-payload-playground-root-secret}
+      MINIO_BUCKET: ${MINIO_BUCKET:-payload-playground}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-payload-playground-app}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-payload-playground-app-secret}
+    volumes:
+      - ./docker/minio-init.sh:/minio-init.sh:ro
+    entrypoint: ['/bin/sh', '/minio-init.sh']
+    restart: 'no'
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    container_name: payload-playground-mailpit
+    restart: unless-stopped
+    ports:
+      - '8025:8025' # web UI
+      - '1025:1025' # SMTP
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  libretranslate:
+    image: libretranslate/libretranslate:v1.9.6
+    container_name: payload-playground-libretranslate
+    restart: unless-stopped
+    environment:
+      LT_LOAD_ONLY: en,ar
+      LT_DISABLE_WEB_UI: 'false'
+    ports:
+      # Override with LIBRETRANSLATE_PORT in .env if 5000 is taken (also update LIBRETRANSLATE_URL).
+      - '${LIBRETRANSLATE_PORT:-5000}:5000'
+    volumes:
+      - libretranslate-models:/home/libretranslate/.local
+    healthcheck:
+      test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 120s
+
+  # One-shot (profile app): creates the app's own database, separate from the dev database.
+  postgres-app-db:
+    profiles: ['app']
+    image: postgres:16-alpine
+    container_name: payload-playground-postgres-app-db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-payload}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-payload}
+      APP_DB: ${APP_DB:-payload_playground_app}
+    volumes:
+      - ./docker/postgres-app-db.sh:/postgres-app-db.sh:ro
+    entrypoint: ['/bin/sh', '/postgres-app-db.sh']
+    restart: 'no'
+
+  # Production build of the site + admin (stop `pnpm dev` first: both use port 3000).
+  # Migrations run on start (prodMigrations). Seed it with:
+  #   DATABASE_URL=postgres://payload:payload@localhost:5434/payload_playground_app pnpm seed
+  app:
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: payload-playground-app
+    container_name: payload-playground-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-payload}:${POSTGRES_PASSWORD:-payload}@postgres:5432/${APP_DB:-payload_playground_app}
+      # Signed URLs are opened by the browser, so the app must sign for a host the browser can reach.
+      MINIO_ENDPOINT: http://host.docker.internal:9200
+      # Own folder in the bucket: deleting media in one database never removes the other's files.
+      MINIO_PREFIX: app
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      LIBRETRANSLATE_URL: http://libretranslate:5000
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres-app-db:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+volumes:
+  postgres-data:
+    name: payload-playground-postgres-data
+  minio-data:
+    name: payload-playground-minio-data
+  libretranslate-models:
+    name: payload-playground-libretranslate-models

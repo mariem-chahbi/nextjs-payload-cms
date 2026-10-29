@@ -1,0 +1,14 @@
+node_modules
+.next
+.env
+.env.*.local
+.git
+.vscode
+coverage
+playwright-report
+test-results
+tests
+seed-assets
+*.log
+Dockerfile
+docker-compose.yml
