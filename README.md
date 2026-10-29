@@ -1,191 +1,122 @@
-# payload-playground
+# nextjs-payload-cms
 
-A test project that evaluates **Payload CMS 3 + Next.js 16** on four questions:
-
-1. Does Payload integrate well with **Postgres (Drizzle)**, **auth and roles**, **file storage on local MinIO**, and **languages and regions**?
-2. Can the **whole site be edited from the admin panel**: every text, image and video, text styles, and the position and layout of every element?
-3. Is **translating English ⇄ Arabic, by region**, easy for non-technical editors?
-4. Does it all run **locally**, with no cloud services or paid APIs?
+A production-minded starter for **Payload CMS 3 + Next.js 16**: a fully editable page builder, English ⇄ Arabic (RTL) by region, Postgres, MinIO storage and Docker. Everything runs locally, with no cloud services or paid APIs.
 
 | | Version |
 |---|---|
-| Payload (all `@payloadcms/*` packages) | **3.91.0** (pinned; 3.92+ requires Node ≥ 24.22.1) |
-| Next.js / React | 16.4.3 / 19.2.6 |
-| Node | 24.19.0 (`.nvmrc`) · pnpm 12 |
+| Payload (`@payloadcms/*`) | 3.91.0, pinned (3.92+ needs Node ≥ 24.22.1) |
+| Next.js / React | 16.4.3 / 19.2.6 (App Router, Turbopack) |
+| Node / pnpm | 24.19.0 (`.nvmrc`) / 12 |
 | Database | Postgres 16 (Drizzle adapter) |
-| Files | MinIO (S3 protocol via `@payloadcms/storage-s3`, **never AWS**) |
+| Files | MinIO over the S3 protocol (`@payloadcms/storage-s3`), never AWS |
 
----
+## Features
+
+- **Page builder:** 17 blocks: Hero, Rich text, Columns, Media + text, Image, Video, Gallery, Cards, Buttons, Stats, Testimonials, FAQ, Logos, CTA, Form, Spacer, Free layout.
+  - Every block has a **Style** tab: spacing, colors, fonts, alignment, visibility per breakpoint and region.
+  - Every image has a **shape** setting (ratio and cover/contain) that crops around its focal point.
+  - Changes appear instantly in **Live Preview**, with drafts, autosave, versions and scheduled publishing.
+- **Site editing:** header, footer, theme (colors, fonts) and site settings are all edited in the admin; no texts are hard-coded.
+- **Content dashboard:** quick actions, pages that need attention, recent edits, and counts of media, documents and form submissions.
+- **Languages and regions:**
+  - Locales `en`, `ar`, `ar-TN` and `en-TN`. Arabic pages are right-to-left.
+  - Fallback chains `ar-TN → ar → en` and `en-TN → en`, so a region stores only what differs.
+  - A region and language switcher on the site.
+- **Translation workflow:**
+  - A side-by-side Translation view, with a status per language (missing / needs review / done).
+  - Auto-translate through a local LibreTranslate, or DeepL.
+  - A grid for editing UI strings, and CSV / XLSX / JSON import and export.
+- **Roles:** admin, editor, translator, viewer. Translators can only edit translated text as drafts; structural changes are rejected on the server.
+- **Storage:** a private MinIO bucket. Media is served through Payload; documents open through 5-minute signed URLs.
 
 ## Quick start
 
 ```bash
 nvm use                      # Node 24.19.0
-cp .env.example .env         # then set PAYLOAD_SECRET to a long random string
+cp .env.example .env         # set PAYLOAD_SECRET to a long random string
 docker compose up -d         # Postgres, MinIO (+ bucket/user), Mailpit, LibreTranslate
 pnpm install
-pnpm seed                    # demo users, regions, pages, media in MinIO
-pnpm dev                     # http://localhost:3000
+pnpm seed                    # demo users, regions, pages and media
+pnpm dev                     # site http://localhost:3000 · admin http://localhost:3000/admin
 ```
 
-The first `docker compose up` downloads LibreTranslate's English and Arabic models, which takes a few minutes. Auto-translate works once the container is `healthy`: `docker compose ps libretranslate`.
+The first `docker compose up` downloads LibreTranslate's language models, which takes a few minutes.
 
-### Ports
+| Service | Address |
+|---|---|
+| Site / admin | http://localhost:3000 · `/admin` |
+| Postgres | `localhost:5434` (db `payload_playground`, user/password `payload`) |
+| MinIO API / console | http://localhost:9200 / http://localhost:9201 |
+| Mailpit (all emails) | http://localhost:8025 |
+| LibreTranslate | http://localhost:5000 (if the port is taken, change `LIBRETRANSLATE_PORT` and `LIBRETRANSLATE_URL`) |
 
-| Service | URL / port | Notes |
+**Seeded logins** (the password is the role followed by `-playground`):
+
+| Role | Email | Can |
 |---|---|---|
-| Site + admin | http://localhost:3000 · http://localhost:3000/admin | `pnpm dev` |
-| Postgres | `localhost:5434` | db `payload_playground`, user/password `payload` |
-| MinIO API | http://localhost:9200 | S3 API used by the app |
-| MinIO console | http://localhost:9201 | login with `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from `.env` (default `payload-playground-root` / `payload-playground-root-secret`) |
-| Mailpit | http://localhost:8025 | every email (forgot password, form submissions); SMTP on 1025 |
-| LibreTranslate | http://localhost:5000 | change `LIBRETRANSLATE_PORT` **and** `LIBRETRANSLATE_URL` in `.env` if 5000 is taken |
+| admin | `admin@payload-playground.local` | everything, including users |
+| editor | `editor@payload-playground.local` | create, edit and publish content |
+| translator | `translator@payload-playground.local` | translate non-English locales, as drafts only |
+| viewer | `viewer@payload-playground.local` | read through the API; no admin panel |
 
-### Seeded logins
-
-The password is the role name followed by `-playground`.
-
-| Role | Email | Password | Can |
-|---|---|---|---|
-| admin | `admin@payload-playground.local` | `admin-playground` | everything, including users and roles |
-| editor | `editor@payload-playground.local` | `editor-playground` | create, edit and publish content; no user management |
-| translator | `translator@payload-playground.local` | `translator-playground` | edit **localized fields in non-English locales** and UI strings; drafts only |
-| viewer | `viewer@payload-playground.local` | `viewer-playground` | read through the API; **no admin panel** |
-
-The seed also creates:
-- **Home** (`/en`), which uses all 17 blocks, is translated into Arabic, has `ar-TN` overrides and a Tunisia-only promo
-- **About** (`/en/about`), English only, to try auto-translate
-- **Team** (`/en/about/team`), to show nested URLs
-- a private PDF in the Documents collection
-
----
-
-## What is where
+## Project structure
 
 ```
 src/
-  payload.config.ts      collections, globals, localization, i18n, email, jobs, endpoints
-  env.ts                 zod validation of .env (refuses an AWS / missing MINIO_ENDPOINT)
-  storage.ts             MinIO through @payloadcms/storage-s3 (media public, documents signed)
-  proxy.ts               /about → /<locale>/about (cookie, then Accept-Language)
-  plugins/               SEO, form builder, storage, translation status, translator rules
-  access/                roles, translator field rules + structure guard
+  payload.config.ts      collections, globals, localization, admin views, jobs
+  env.ts                 validated env; refuses a missing or AWS MINIO_ENDPOINT
+  storage.ts             MinIO adapter (public media, signed documents)
+  proxy.ts               locale routing (cookie, then Accept-Language)
+  blocks/<Name>/         config.ts (admin fields) + Component.tsx (site)
+  fields/                Style tab, links, image shape, fonts, colors
   collections/ globals/  Pages, Media, Documents, Regions, Translations, Users / Site settings, Theme, Header, Footer
-  blocks/<Name>/         config.ts (admin fields) + Component.tsx (site), registry.ts, RenderBlocks.tsx
-  fields/                Style tab, links/buttons, per-breakpoint fields, fonts, colors
-  lexical/               editor features, text color/size (TextStateFeature), inline button/icon
-  i18n/                  locales (single source of truth), fallback chain, regions, Intl formatting
-  translation/           translatable-field walker, auto-translate, providers, CSV/XLSX/JSON, status, progress
-  components/admin/      Translation view, UI strings grid, import/export, dashboard widget, badges
-  components/site/       Header, Footer, Region + Language switcher, RichText, Media, ThemeStyle
-  app/(frontend)/[locale]/  site root layout (<html lang dir>), pages, 404
-  app/(payload)/         generated by Payload (admin + REST/GraphQL)
-  seed/                  pnpm seed (+ generate-assets.ts for seed-assets/)
-  migrations/            committed migrations (applied automatically in production)
-tests/                   vitest (pnpm test) · tests/e2e Playwright (pnpm test:e2e)
-docker/                  MinIO bucket/user init, app database init
+  access/ plugins/       roles, translator guard, SEO, forms, storage, translation status
+  i18n/ translation/     locales and fallback, auto-translate, import/export, progress
+  components/admin/      dashboard, Translation view, UI strings grid, import/export
+  components/site/       header, footer, switcher, media, rich text
+  app/(frontend)/[locale]/  the public site
+  seed/ migrations/      demo content, committed migrations
+tests/                   vitest unit tests · tests/e2e Playwright
 ```
 
-### Scripts
+## Scripts
 
 | Script | Does |
 |---|---|
-| `pnpm dev` / `build` / `start` | Next.js dev, production build and start |
-| `pnpm typecheck` / `lint` / `test` | `tsc --noEmit`, ESLint, vitest (no Docker needed) |
-| `pnpm test:e2e` | Playwright smoke tests (needs the stack and the seed; `E2E_CHANNEL=msedge` uses Edge instead of downloading Chromium) |
-| `pnpm payload` | Payload CLI |
-| `pnpm migrate` / `migrate:create <name>` | run / create migrations |
-| `pnpm generate:types` / `generate:importmap` | `payload-types.ts` / admin import map (after adding admin components) |
-| `pnpm seed` | reset and seed demo content (idempotent) |
-| `pnpm seed:assets` | regenerate `seed-assets/` (needs ffmpeg; output is committed) |
+| `pnpm dev` · `build` · `start` | development server, production build, start |
+| `pnpm typecheck` · `lint` · `test` | TypeScript, ESLint, vitest (no Docker needed) |
+| `pnpm test:e2e` | Playwright smoke tests (needs the stack and the seed; `E2E_CHANNEL=msedge` uses Edge) |
+| `pnpm seed` | reset and seed demo content (can be re-run) |
+| `pnpm migrate` · `migrate:create <name>` | run / create migrations |
+| `pnpm generate:types` · `generate:importmap` | regenerate Payload types / the admin import map |
 
-### Database: push in dev, migrations in production
-
-- `pnpm dev` uses **schema push**: the dev database follows the config automatically.
-- In production (`NODE_ENV=production`, Docker app), push is off and the committed migrations in `src/migrations` run at startup (`prodMigrations`).
-- After changing fields, run `pnpm migrate:create <name>` and commit the migration.
-- The Docker app uses its **own database** (`payload_playground_app`), so its migrations never collide with the pushed dev database.
-
-### Docker app (production build)
+## Deployment (Docker)
 
 ```bash
-# stop `pnpm dev` first (both use port 3000)
 docker compose --profile app up -d --build
-DATABASE_URL=postgres://payload:payload@localhost:5434/payload_playground_app NODE_ENV=production pnpm seed   # optional demo content
+DATABASE_URL=postgres://payload:payload@localhost:5434/payload_playground_app NODE_ENV=production pnpm seed
 ```
 
-- The image is `node:24.19.0-alpine`, built with `output: 'standalone'`. It needs no database at build time.
-- Signed MinIO URLs are created for `host.docker.internal:9200`, which Docker Desktop resolves on the host.
+- The image is a standalone Next.js build on `node:24.19.0-alpine` and needs no database at build time.
+- **Dev** pushes the schema automatically. **Production** applies the committed migrations at startup. After changing fields, run `pnpm migrate:create <name>`.
+- The Docker app has its own database and its own MinIO folder (`MINIO_PREFIX=app`), so it never touches dev content.
 
-### MinIO only
+## Extending
 
-- `@payloadcms/storage-s3` is only the S3-protocol connector, pointed at `MINIO_ENDPOINT` with `forcePathStyle`.
-- `src/env.ts` **refuses to start** if `MINIO_ENDPOINT` is missing or is any `*.amazonaws.com` host.
-- The bucket `payload-playground` is private. The app uses an app key limited to that bucket, not the root user (`docker/minio-init.sh`).
-- **Media** (`media/` prefix) is public and served through Payload. The browser uploads files straight to MinIO (`clientUploads`).
-- **Documents** (`documents/` prefix) are for logged-in users only. They open through a presigned URL valid for 5 minutes.
-- The image is the community build `pgsty/minio`, because the official `minio/minio` images are no longer published on Docker Hub.
+- **New block:**
+  1. Add `src/blocks/<Name>/config.ts` (with `defineBlock`) and `Component.tsx`.
+  2. Register it in `src/blocks/index.ts` and `registry.ts`.
+  3. Add a sample to `tests/blocks.test.tsx`.
+  4. Run `pnpm generate:types && pnpm migrate:create <name>`.
 
----
+  Its localized fields show up in the translation tools on their own.
+- **New region:** in the admin, go to *Localization → Regions → Create*. No code is needed.
+- **New locale code:** add it to `LOCALES` in `src/i18n/locales.ts`, then run `pnpm generate:types && pnpm migrate:create <name>`.
 
-## Translating (for editors)
+## Implementation notes
 
-| Tool | Where | What it does |
-|---|---|---|
-| Locale switcher | top of any document | edit `en`, `ar`, `ar-TN`, `en-TN` (only locales of active regions are offered) |
-| **Translate** button | next to Save / Publish | opens the **Translation view**: every localized field side by side (source \| target, Arabic column right-to-left), with missing and *inherited from ar/en* fields marked, inline edit, status, ✨ auto-translate |
-| Status | sidebar of pages and globals, list badges | *missing / needs review / done* per locale; editing English marks "done" translations **needs review** automatically |
-| UI strings grid | nav → *UI strings grid* | keys as rows, en \| ar \| ar-TN \| en-TN as columns; search, namespace filter, "missing only", edits save on blur |
-| Import / export | nav → *Import / export* | export a locale (or only missing texts) as CSV (UTF-8 with BOM for Excel), XLSX or JSON; edit the `target` column; import validates every key and lists problems by row |
-| Dashboard | `/admin` | % translated per locale, with links to what is missing |
-
-Rules:
-- **Fallback:** `ar-TN → ar → en` and `en-TN → en`. A region locale stores only what is **different** (prices, phone numbers, local wording). Everything else is inherited. Localized "required" fields are required in English only.
-- **Rich text** is translated text node by text node, so headings, lists, links, bold, italic, colors and sizes are kept. Export rows hold one text segment each, which keeps formatting on import.
-- **Machine translation:** LibreTranslate in Docker by default, free and local. Set `TRANSLATE_PROVIDER=deepl` and `DEEPL_API_KEY` to use DeepL. Results are always marked *needs review*.
-- **Translators** may change only localized fields in a non-English locale, and only as drafts. Saves that add, remove, reorder or retype blocks, or change any shared value, are **rejected** (`src/access/translator.ts`).
-
----
-
-## How to add a block
-
-1. Create `src/blocks/MyBlock/config.ts` with `defineBlock({ slug: 'myBlock', interfaceName: 'MyBlockBlock', labels, fields })`.
-   - Mark every text field `localized: true`.
-   - `defineBlock` adds the Style tab and fits enum names to Postgres limits.
-2. Create `src/blocks/MyBlock/Component.tsx`: `({ block, ctx }) => …`. Use logical CSS only (`*-inline-start`, `ps-`/`pe-`), never left/right, and colors only from `var(--color-*)`.
-3. Register it in `src/blocks/index.ts` (`layoutBlocks`, and `nestedBlocks` if it can live in a column) and in `src/blocks/registry.ts`.
-4. Run `pnpm generate:types`, then add sample data to `tests/blocks.test.tsx`. The test fails until every registered block has a sample.
-5. Run `pnpm migrate:create add-my-block` and commit the migration. In dev, push applies it automatically.
-
-Translation needs no extra work: new localized fields appear in the Translation view, auto-translate, export and the dashboard automatically.
-
-## How to add a region (data only, no code)
-
-1. In the admin, go to **Localization → Regions → Create**.
-2. Fill in the code (e.g. `ma`), the name (translatable), the country, the **languages** (pick existing locales, e.g. `ar` and `en`), the default language, the currency, date style, digits (Latin or Arabic-Indic), the time zone, and *Active*.
-3. Save. The region appears in the site's **Region + Language** switcher and its locales in the admin locale selector.
-   - Regions can share locales: visitors who pick the new region keep it in a cookie.
-   - Blocks can target it with **Style → Show in regions**.
-
-## How to add a new locale code (e.g. `fr` or `ar-MA`)
-
-A locale *code* is part of the database schema (enums and localized tables), so it needs a config change and a migration:
-
-1. Add it to `LOCALES` in `src/i18n/locales.ts`:
-   - `code`, `label`, `nativeLabel`, `rtl`, `language`
-   - `fallbackLocale`, e.g. `['ar', 'en']` for `ar-MA`
-2. If its `language` is not `en` or `ar`, extend the `language` type there and in `src/translation/providers/types.ts`, and check that LibreTranslate loads it (`LT_LOAD_ONLY` in `docker-compose.yml`).
-3. `pnpm generate:types && pnpm migrate:create add-locale-ar-ma`. Review and commit the migration.
-4. Restart `pnpm dev` (dev pushes the schema), or deploy (production runs the migration).
-5. Add the locale to a region in the admin, and translate the UI strings in the grid.
-6. Optionally add a test for its fallback chain in `tests/fallback.test.ts`.
-
----
-
-## Known limitations and notes
-
-- **Dev speed:** the admin is slow in `pnpm dev` (first compile of a view takes 10–40 s), especially in a OneDrive folder. Production (`pnpm build && pnpm start`) serves cached pages in about 50 ms.
-- **Turbopack cache:** if `pnpm dev` crashes with "task is missing in memory or persistent storage", stop it and delete `.next`.
-- **404 pages:** Next.js sends 404s from the `[locale]` layout as an error shell that the browser fills in. The status is 404 and the content comes from Site settings (verified in the browser by `pnpm test:e2e`).
-- **Free Layout** is edited with % fields per breakpoint (x, y, width, layer, rotation), with Live Preview showing each change. There is no drag-on-canvas editor.
-- **Cookie auth from scripts:** Payload accepts the session cookie only with an `Origin` or `Sec-Fetch-Site` header. Browsers send them; for curl, use `Authorization: JWT <token>`.
+- **Give each blocks field its own copy of the block configs** (`copyConfig`). Payload sanitizes configs in place, so a shared object loses `localized` on its fields.
+- **Pass a new `context` object to each Local API call.** Payload uses it as `req.context`, and the storage plugin keeps upload state there.
+- **Only `translations` has per-field access rules.** Payload evaluates field access on every admin request; rules on every block field made admin views take 15–30 s. Other collections rely on the translator guard instead.
+- **Dev mode is slower than production.** Each admin view compiles on first visit. Run `pnpm build` to measure real speed. If Turbopack reports a stale module, delete `.next` and restart.
+- **Calling the API from curl or scripts:** use `Authorization: JWT <token>`. The session cookie only works with an `Origin` or `Sec-Fetch-Site` header.
