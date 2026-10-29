@@ -369,17 +369,41 @@ figcaption { color: var(--color-muted); font-size: 0.875rem; margin-block-start:
 }
 
 /* ── Form ─────────────────────────────────────────────────────────── */
-.cms-form { display: flex; flex-wrap: wrap; gap: var(--space-md); }
-.form-field, .form-message { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.35rem; }
-.form-field label { font-weight: 600; }
-.form-field input, .form-field textarea, .form-field select {
-  font: inherit; padding: 0.65rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--color-background); color: var(--color-text);
+/* A card: heading, intro and fields grouped on the surface color. */
+.form-block {
+  --field-border: color-mix(in srgb, var(--color-text) 22%, transparent);
+  padding: clamp(var(--space-sm), 4vw, var(--space-lg)); border-radius: calc(var(--radius) * 1.5);
+  background: var(--color-surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
 }
-.form-check { display: flex; gap: 0.5rem; align-items: center; font-weight: 400 !important; }
-.form-error { color: var(--color-accent); flex-basis: 100%; }
-.form-actions { flex-basis: 100%; }
-.form-confirmation { padding: var(--space-md); border-radius: var(--radius); background: var(--color-surface); }
+.form-block > .block-title { margin-block-end: var(--space-xs); }
+.form-block > .rich-text, .form-block > .block-title + :not(form) { color: var(--color-muted); margin-block-end: var(--space-md); }
+.cms-form { display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); }
+.form-field, .form-message { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.4rem; min-inline-size: 0; }
+@media (max-width: 767px) { .form-field, .form-message { flex-basis: 100% !important; } }
+.form-field > label { font-weight: 600; font-size: 0.95rem; }
+.form-field > label > span[aria-hidden] { color: var(--color-accent); }
+.form-field input, .form-field textarea, .form-field select {
+  font: inherit; inline-size: 100%; box-sizing: border-box; padding: 0.7rem 0.9rem; border-radius: var(--radius);
+  border: 1px solid var(--field-border); background: var(--color-background); color: var(--color-text);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.form-field textarea { resize: vertical; min-block-size: 8rem; }
+.form-field input:hover, .form-field textarea:hover, .form-field select:hover { border-color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+.form-field input:focus-visible, .form-field textarea:focus-visible, .form-field select:focus-visible {
+  outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+.form-field > .form-check { display: flex; gap: 0.6rem; align-items: center; font-weight: 400; font-size: 1rem; cursor: pointer; }
+.form-check input { inline-size: 1.15rem; block-size: 1.15rem; margin: 0; accent-color: var(--color-primary); }
+.form-error {
+  flex-basis: 100%; margin: 0; padding: 0.7rem 0.9rem; border-radius: var(--radius); color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.form-actions { flex-basis: 100%; padding-block-start: var(--space-xs); }
+@media (max-width: 767px) { .form-actions .btn { inline-size: 100%; } }
+.form-confirmation {
+  padding: var(--space-md); border-radius: var(--radius); background: var(--color-background);
+  border-inline-start: 4px solid var(--color-primary);
+}
 
 /* ── Spacer ───────────────────────────────────────────────────────── */
 .spacer { block-size: var(--h-m, var(--h-t, var(--h-d, 48px))); display: flex; align-items: center; justify-content: center; }
